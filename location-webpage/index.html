@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMU Fleet Geographic Dashboard | Enaex Africa</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #2b2f38;
+            --bg-secondary: #343842;
+            --bg-card: #3d424e;
+            --bg-card-hover: #464c59;
+            --bg-input: #2f3340;
+            --accent-red: #c41e3a;
+            --accent-red-light: #e63950;
+            --accent-red-glow: rgba(196, 30, 58, 0.3);
+            --accent-green: #22c55e;
+            --accent-amber: #f59e0b;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --text-primary: #f0f0f2;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.15);
+            --glass-bg: rgba(61, 66, 78, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.35);
+            --truck-cab: #c41e3a;
+            --truck-tank-onpit: #e8b930;
+            --truck-tank-onroad: #e8b930;
+            --truck-tank-inactive: #888;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg-primary); color:var(--text-primary); min-height:100vh; overflow-x:hidden; }
+
+        @keyframes fadeInUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes slideInLeft { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes glowPulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+
+        /* HEADER */
+        .header { background:var(--bg-secondary); border-bottom:1px solid var(--border-color); padding:.6rem 1.5rem; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:1000; overflow:hidden; }
+        .header::before { content:''; position:absolute; top:-30px; right:80px; width:200px; height:200px; border:1px solid rgba(255,255,255,.04); transform:rotate(45deg); pointer-events:none; }
+        .header::after { content:''; position:absolute; top:-50px; right:180px; width:160px; height:160px; border:1px solid rgba(255,255,255,.03); transform:rotate(45deg); pointer-events:none; }
+        .logo-section { display:flex; align-items:center; gap:1rem; animation:slideInLeft .6s ease-out; }
+        .logo { width:44px; height:44px; flex-shrink:0; }
+        .logo svg { width:100%; height:100%; }
+        .header-title h1 { font-size:1.1rem; font-weight:700; letter-spacing:-.02em; }
+        .header-title p { font-size:.7rem; color:var(--text-secondary); margin-top:.1rem; }
+        .header-meta { display:flex; align-items:center; gap:1rem; animation:slideInRight .6s ease-out; }
+        .header-badge { display:flex; align-items:center; gap:.4rem; background:var(--accent-red); padding:.3rem .7rem; border-radius:20px; font-size:.65rem; font-weight:600; color:white; }
+        .header-badge .dot { width:6px; height:6px; border-radius:50%; background:white; animation:glowPulse 2s ease-in-out infinite; }
+        .date-display { background:var(--bg-card); padding:.35rem .7rem; border-radius:6px; border:1px solid var(--border-color); font-size:.7rem; color:var(--text-secondary); font-family:'Roboto Mono',monospace; }
+
+        /* MAIN LAYOUT */
+        .main-container { display:grid; grid-template-columns:280px 1fr 320px; gap:.6rem; padding:.6rem; height:calc(100vh - 60px); }
+
+        /* SIDEBAR */
+        .sidebar { display:flex; flex-direction:column; gap:.6rem; overflow-y:auto; animation:slideInLeft .5s ease-out .1s both; }
+
+        /* CARDS */
+        .card { background:var(--glass-bg); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); border:1px solid var(--glass-border); border-radius:10px; padding:.85rem; transition:border-color .3s ease; }
+        .card:hover { border-color:var(--border-hover); }
+        .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:.7rem; padding-bottom:.5rem; border-bottom:1px solid var(--border-color); }
+        .card-title { font-size:.72rem; font-weight:600; color:var(--text-primary); display:flex; align-items:center; gap:.4rem; text-transform:uppercase; letter-spacing:.04em; }
+        .card-title .icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; background:var(--accent-red); border-radius:3px; font-size:.55rem; }
+
+        /* STATS */
+        .stats-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.5rem; }
+        .stat-item { background:var(--bg-primary); border-radius:7px; padding:.55rem .4rem; text-align:center; border:1px solid var(--border-color); transition:all .25s ease; position:relative; overflow:hidden; }
+        .stat-item::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; opacity:0; transition:opacity .25s ease; }
+        .stat-item:hover { border-color:var(--border-hover); transform:translateY(-1px); }
+        .stat-item:hover::before { opacity:1; }
+        .stat-item.red::before { background:var(--accent-red); }
+        .stat-item.green::before { background:var(--accent-green); }
+        .stat-item.amber::before { background:var(--accent-amber); }
+        .stat-item.blue::before { background:var(--accent-blue); }
+        .stat-item.purple::before { background:var(--accent-purple); }
+        .stat-value { font-size:1.3rem; font-weight:800; font-family:'Roboto Mono',monospace; line-height:1; }
+        .stat-value.accent-red { color:var(--accent-red-light); }
+        .stat-value.accent-green { color:var(--accent-green); }
+        .stat-value.accent-amber { color:var(--accent-amber); }
+        .stat-value.accent-blue { color:var(--accent-blue); }
+        .stat-value.accent-purple { color:var(--accent-purple); }
+        .stat-label { font-size:.55rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-top:.25rem; font-weight:500; }
+
+        /* SEARCH & FILTERS */
+        .search-container { position:relative; margin-bottom:.6rem; }
+        .search-input { width:100%; background:var(--bg-input); border:1px solid var(--border-color); border-radius:7px; padding:.5rem .6rem .5rem 2rem; color:var(--text-primary); font-size:.75rem; font-family:'Inter',sans-serif; transition:border-color .2s ease; }
+        .search-input:focus { outline:none; border-color:var(--accent-red); box-shadow:0 0 0 3px var(--accent-red-glow); }
+        .search-input::placeholder { color:var(--text-muted); }
+        .search-icon { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:.75rem; pointer-events:none; }
+        .filter-group { margin-bottom:.5rem; }
+        .filter-label { font-size:.6rem; color:var(--text-muted); margin-bottom:.3rem; display:block; text-transform:uppercase; letter-spacing:.06em; font-weight:500; }
+        .filter-select { width:100%; background:var(--bg-input); border:1px solid var(--border-color); border-radius:6px; padding:.45rem .6rem; color:var(--text-primary); font-size:.75rem; font-family:'Inter',sans-serif; cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .6rem center; padding-right:1.8rem; }
+        .filter-select:focus { outline:none; border-color:var(--accent-red); }
+        .filter-select option { background:var(--bg-secondary); color:var(--text-primary); }
+        .checkbox-group { display:flex; flex-wrap:wrap; gap:.3rem; }
+        .checkbox-item { display:flex; align-items:center; gap:.25rem; background:var(--bg-input); padding:.25rem .4rem; border-radius:4px; border:1px solid var(--border-color); cursor:pointer; font-size:.65rem; color:var(--text-secondary); -webkit-user-select:none; user-select:none; }
+        .checkbox-item:hover { border-color:var(--accent-red); }
+        .checkbox-item input { accent-color:var(--accent-red); width:11px; height:11px; }
+
+        /* REGION BARS */
+        .region-bar { margin-bottom:.5rem; }
+        .region-bar-header { display:flex; justify-content:space-between; margin-bottom:.15rem; }
+        .region-bar-name { font-size:.65rem; color:var(--text-secondary); }
+        .region-bar-count { font-size:.65rem; font-weight:600; color:var(--text-primary); font-family:'Roboto Mono',monospace; }
+        .region-bar-track { height:4px; background:var(--bg-primary); border-radius:3px; overflow:hidden; }
+        .region-bar-fill { height:100%; border-radius:3px; transition:width .8s cubic-bezier(.22,1,.36,1); }
+
+        /* CENTER AREA */
+        .center-area { display:flex; flex-direction:column; gap:0; animation:fadeInUp .5s ease-out .2s both; overflow:hidden; border-radius:10px; border:1px solid var(--border-color); box-shadow:var(--shadow-lg); }
+
+        /* TAB BAR */
+        .tab-bar { display:flex; background:var(--bg-secondary); border-bottom:1px solid var(--border-color); overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
+        .tab-bar::-webkit-scrollbar { display:none; }
+        .tab-btn { flex-shrink:0; padding:.55rem .85rem; font-size:.65rem; font-weight:600; font-family:'Inter',sans-serif; color:var(--text-muted); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:all .2s ease; white-space:nowrap; }
+        .tab-btn:hover { color:var(--text-secondary); background:rgba(255,255,255,.03); }
+        .tab-btn.active { color:var(--text-primary); border-bottom-color:var(--accent-red); background:rgba(196,30,58,.08); }
+        .tab-btn .tab-count { background:var(--bg-card); padding:.1rem .35rem; border-radius:8px; font-size:.55rem; margin-left:.3rem; font-family:'Roboto Mono',monospace; }
+        .tab-btn.active .tab-count { background:var(--accent-red); color:white; }
+
+        /* BM INFO BANNER */
+        .bm-banner { display:none; background:linear-gradient(135deg,rgba(196,30,58,.12),rgba(196,30,58,.04)); border-bottom:1px solid var(--border-color); padding:.5rem .85rem; flex-shrink:0; }
+        .bm-banner.active { display:flex; align-items:center; gap:.75rem; animation:fadeInUp .3s ease-out; }
+        .bm-banner-name { font-size:.8rem; font-weight:700; color:var(--text-primary); }
+        .bm-banner-title { font-size:.65rem; color:var(--accent-red-light); }
+        .bm-banner-stats { display:flex; gap:.75rem; margin-left:auto; }
+        .bm-banner-stat { text-align:center; }
+        .bm-banner-stat-value { font-size:.85rem; font-weight:700; font-family:'Roboto Mono',monospace; color:var(--text-primary); }
+        .bm-banner-stat-label { font-size:.5rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+
+        /* MAP */
+        #map { flex:1; background:var(--bg-secondary); min-height:0; }
+
+        /* MAP LEGEND */
+        .map-legend { position:absolute; bottom:14px; left:14px; background:var(--glass-bg); -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px); border:1px solid var(--glass-border); border-radius:8px; padding:.7rem; z-index:500; max-width:170px; box-shadow:var(--shadow-lg); }
+        .legend-title { font-size:.6rem; font-weight:700; margin-bottom:.4rem; color:var(--text-primary); text-transform:uppercase; letter-spacing:.05em; }
+        .legend-item { display:flex; align-items:center; gap:.4rem; margin-bottom:.25rem; font-size:.6rem; color:var(--text-secondary); }
+        .legend-marker { width:10px; height:10px; border-radius:50%; border:2px solid rgba(255,255,255,.5); flex-shrink:0; }
+
+        /* RIGHT PANEL */
+        .details-panel { display:flex; flex-direction:column; gap:.6rem; overflow-y:auto; animation:slideInRight .5s ease-out .3s both; }
+        .location-list { display:flex; flex-direction:column; gap:.35rem; max-height:320px; overflow-y:auto; }
+        .location-item { background:var(--bg-primary); border:1px solid var(--border-color); border-radius:7px; padding:.55rem .65rem; cursor:pointer; transition:all .2s ease; }
+        .location-item:hover,.location-item.active { border-color:var(--accent-red); background:var(--bg-card-hover); }
+        .location-item-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.3rem; }
+        .location-name { font-weight:600; font-size:.78rem; }
+        .location-count { background:var(--accent-red); color:white; padding:.12rem .4rem; border-radius:10px; font-size:.55rem; font-weight:700; font-family:'Roboto Mono',monospace; }
+        .location-meta { display:flex; gap:.3rem; flex-wrap:wrap; }
+        .location-tag { font-size:.55rem; padding:.12rem .35rem; border-radius:3px; background:var(--bg-card); color:var(--text-muted); font-weight:500; }
+        .location-tag.region { border-left:2px solid var(--accent-blue); }
+        .location-tag.site-type { border-left:2px solid var(--accent-green); }
+        .location-tag.inactive { border-left:2px solid var(--text-muted); }
+        .location-tag.bm { border-left:2px solid var(--accent-red); }
+
+        /* CONTACT CARD */
+        .contact-card { background:var(--bg-primary); border:1px solid var(--border-color); border-radius:7px; padding:.6rem; margin-bottom:.5rem; }
+        .contact-row { display:flex; justify-content:space-between; padding:.2rem 0; font-size:.6rem; }
+        .contact-label { color:var(--text-muted); font-weight:500; }
+        .contact-value { color:var(--text-primary); font-weight:600; text-align:right; max-width:60%; }
+
+        /* MMU DETAIL */
+        .mmu-detail-panel { background:var(--bg-primary); border-radius:7px; padding:.85rem; display:none; border:1px solid var(--border-color); }
+        .mmu-detail-panel.active { display:block; animation:fadeInUp .3s ease-out; }
+        .mmu-detail-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.7rem; padding-bottom:.5rem; border-bottom:1px solid var(--border-color); }
+        .mmu-detail-title { font-size:.85rem; font-weight:700; }
+        .close-detail { background:var(--bg-card); border:1px solid var(--border-color); color:var(--text-secondary); cursor:pointer; width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.9rem; transition:all .2s ease; line-height:1; }
+        .close-detail:hover { background:var(--accent-red); border-color:var(--accent-red); color:white; }
+        .detail-info-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.35rem; margin-bottom:.6rem; }
+        .detail-info-item { background:var(--bg-card); border-radius:5px; padding:.4rem; border:1px solid var(--border-color); }
+        .detail-info-label { font-size:.5rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.15rem; }
+        .detail-info-value { font-size:.72rem; font-weight:600; }
+
+        /* TRUCK GRID (for detail panel) */
+        .truck-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.35rem; max-height:240px; overflow-y:auto; }
+        .truck-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:6px; padding:.35rem; text-align:center; transition:border-color .2s ease; }
+        .truck-card:hover { border-color:var(--accent-red); }
+        .truck-card svg { width:100%; max-width:100px; height:auto; }
+        .truck-card-info { font-size:.5rem; color:var(--text-muted); margin-top:.15rem; }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width:4px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:var(--border-color); border-radius:3px; }
+        ::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
+
+        /* LEAFLET OVERRIDES */
+        .leaflet-container { background:var(--bg-secondary); font-family:'Inter',sans-serif; }
+        .leaflet-popup-content-wrapper { background:var(--bg-card); color:var(--text-primary); border-radius:10px; box-shadow:var(--shadow-lg); border:1px solid var(--border-color); }
+        .leaflet-popup-content { margin:0; padding:0; font-family:'Inter',sans-serif; }
+        .leaflet-popup-tip { background:var(--bg-card); }
+        .leaflet-control-zoom a { background:var(--bg-card)!important; color:var(--text-primary)!important; border-color:var(--border-color)!important; }
+        .leaflet-control-zoom a:hover { background:var(--bg-card-hover)!important; }
+        .custom-popup { padding:.75rem; min-width:200px; }
+        .custom-popup h3 { font-size:.9rem; font-weight:700; margin-bottom:.1rem; }
+        .popup-region { font-size:.68rem; color:var(--accent-red-light); margin-bottom:.5rem; font-weight:500; }
+        .popup-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:.3rem; margin-bottom:.5rem; }
+        .popup-stat { background:var(--bg-primary); padding:.35rem .25rem; border-radius:5px; text-align:center; border:1px solid var(--border-color); }
+        .popup-stat-value { font-size:.8rem; font-weight:700; font-family:'Roboto Mono',monospace; }
+        .popup-stat-label { font-size:.45rem; color:var(--text-muted); text-transform:uppercase; margin-top:.05rem; }
+        .popup-detail-row { display:flex; justify-content:space-between; padding:.2rem 0; border-bottom:1px solid var(--border-color); font-size:.65rem; }
+        .popup-detail-row:last-child { border-bottom:none; }
+        .popup-detail-label { color:var(--text-muted); }
+        .popup-detail-value { color:var(--text-primary); font-weight:600; }
+
+        /* RESPONSIVE */
+        @media(max-width:1400px) { .main-container { grid-template-columns:250px 1fr 280px; } }
+        @media(max-width:1100px) { .main-container { grid-template-columns:1fr; height:auto; } .center-area { height:500px; } .header { flex-direction:column; gap:.4rem; } }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo-section">
+            <div class="logo">
+                <svg viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="0" y="0" width="120" height="80" rx="8" fill="white"/>
+                    <g transform="translate(12,12)"><polygon points="18,0 24,14 18,28 12,14" fill="#c41e3a"/><polygon points="0,14 14,8 28,14 14,20" fill="#c41e3a"/><polygon points="18,10 22,14 18,18 14,14" fill="white"/></g>
+                    <text x="48" y="30" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="800" fill="#333">Enaex</text>
+                    <text x="48" y="46" font-family="Inter,Arial,sans-serif" font-size="11" font-weight="500" fill="#c41e3a">Africa</text>
+                </svg>
+            </div>
+            <div class="header-title">
+                <h1>MMU Fleet Geographic Dashboard</h1>
+                <p>Mobile Manufacturing Unit deployment across sub-Saharan Africa</p>
+            </div>
+        </div>
+        <div class="header-meta">
+            <div class="header-badge"><span class="dot"></span> LIVE FLEET VIEW</div>
+            <div class="date-display" id="currentDate"></div>
+        </div>
+    </header>
+    <main class="main-container">
+        <aside class="sidebar">
+            <div class="card">
+                <div class="card-header"><div class="card-title"><span class="icon">&#9632;</span> Fleet Overview</div></div>
+                <div class="stats-grid">
+                    <div class="stat-item red"><div class="stat-value accent-red" id="totalMMUs">-</div><div class="stat-label">Total MMUs</div></div>
+                    <div class="stat-item green"><div class="stat-value accent-green" id="activeMMUs">-</div><div class="stat-label">Active</div></div>
+                    <div class="stat-item amber"><div class="stat-value accent-amber" id="totalSites">-</div><div class="stat-label">Sites</div></div>
+                    <div class="stat-item blue"><div class="stat-value accent-blue" id="totalRegions">-</div><div class="stat-label">Regions</div></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><div class="card-title"><span class="icon">&#9670;</span> Filters</div></div>
+                <div class="search-container"><span class="search-icon">&#128269;</span><input type="text" class="search-input" id="fleetSearch" placeholder="Search fleet # or site..."></div>
+                <div class="filter-group"><label class="filter-label">Region</label><select class="filter-select" id="regionFilter" title="Filter by region"><option value="all">All Regions</option></select></div>
+                <div class="filter-group"><label class="filter-label">Site Type</label><select class="filter-select" id="siteTypeFilter" title="Filter by site type"><option value="all">All Site Types</option><option value="Mine Base site (On-Pit)">Mine Base (On-Pit)</option><option value="Mini-Pit site (On-road)">Mini-Pit (On-Road)</option><option value="Inactive">Inactive</option></select></div>
+                <div class="filter-group"><label class="filter-label">Tank Size</label><div class="checkbox-group" id="tankSizeFilters"></div></div>
+            </div>
+            <div class="card">
+                <div class="card-header"><div class="card-title"><span class="icon">&#9650;</span> Distribution by Region</div></div>
+                <div id="regionDistribution"></div>
+            </div>
+        </aside>
+        <div class="center-area">
+            <div class="tab-bar" id="tabBar"></div>
+            <div class="bm-banner" id="bmBanner">
+                <div>
+                    <div class="bm-banner-name" id="bmName"></div>
+                    <div class="bm-banner-title" id="bmTitle"></div>
+                </div>
+                <div class="bm-banner-stats" id="bmStats"></div>
+            </div>
+            <div id="map"></div>
+            <div class="map-legend">
+                <div class="legend-title">Site Classification</div>
+                <div class="legend-item"><div class="legend-marker" style="background:#22c55e;"></div><span>Mine Base (On-Pit)</span></div>
+                <div class="legend-item"><div class="legend-marker" style="background:#3b82f6;"></div><span>Mini-Pit (On-Road)</span></div>
+                <div class="legend-item"><div class="legend-marker" style="background:#6b7280;"></div><span>Inactive</span></div>
+            </div>
+        </div>
+        <aside class="details-panel">
+            <div class="card"><div class="card-header"><div class="card-title"><span class="icon">&#9679;</span> Locations (<span id="locationCount">0</span>)</div></div><div class="location-list" id="locationList"></div></div>
+            <div class="card mmu-detail-panel" id="mmuDetailPanel">
+                <div class="mmu-detail-header"><div class="mmu-detail-title" id="detailTitle">Location Details</div><button type="button" class="close-detail" onclick="closeMmuDetail()">&times;</button></div>
+                <div id="mmuDetailContent"></div>
+            </div>
+            <div class="card"><div class="card-header"><div class="card-title"><span class="icon">&#9654;</span> Fleet Status</div></div>
+                <div class="stats-grid">
+                    <div class="stat-item green"><div class="stat-value accent-green" id="onPitCount">-</div><div class="stat-label">On-Pit</div></div>
+                    <div class="stat-item blue"><div class="stat-value accent-blue" id="onRoadCount">-</div><div class="stat-label">On-Road</div></div>
+                    <div class="stat-item amber"><div class="stat-value accent-amber" id="parkedCount">-</div><div class="stat-label">Parked</div></div>
+                    <div class="stat-item purple"><div class="stat-value accent-purple" id="rebuildCount">-</div><div class="stat-label">Rebuild</div></div>
+                </div>
+            </div>
+        </aside>
+    </main>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    // ==================== FLEET DATA ====================
+    const fleetData = {
+        locations: [
+            {location:"Belfast",region:"Mpumalanga",mmu_count:6,fleet_numbers:[722,727,756,788,792,913],tank_sizes:{"18t":4,"10t":2},mmu_types:{"Vertex A":6},drive_configs:{"6x6":6},makes:{"SCANIA G410":6},site_type:"Mine Base site (On-Pit)",latitude:-25.68,longitude:30.04,province:"Mpumalanga",fleets:[{no:722,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:727,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:756,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:788,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:792,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:913,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Brauteseth",region:"Kwa Zulu Natal",mmu_count:2,fleet_numbers:[716,717],tank_sizes:{"10t":2},mmu_types:{"Emulgex A":2},drive_configs:{"6x6":2},makes:{"SCANIA G410":2},site_type:"Mini-Pit site (On-road)",latitude:-27.8,longitude:30.5,province:"KwaZulu-Natal",fleets:[{no:716,size:"10t",type:"Emulgex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:717,size:"10t",type:"Emulgex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Carolina",region:"Mpumalanga",mmu_count:8,fleet_numbers:[702,728,733,737,758,783,787,795],tank_sizes:{"18t":5,"10t":2,"15t":1},mmu_types:{"Vertex A":8},drive_configs:{"6x6":7,"8x6":1},makes:{"SCANIA G410":8},site_type:"Mini-Pit site (On-road)",latitude:-26.07,longitude:30.12,province:"Mpumalanga",fleets:[{no:702,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:728,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:733,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:737,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:758,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:783,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:787,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:795,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Dorstfontein",region:"Mpumalanga",mmu_count:4,fleet_numbers:[740,742,757,759],tank_sizes:{"10t":3,"15t":1},mmu_types:{"Vertex A":4},drive_configs:{"6x6":3,"8x4":1},makes:{"SCANIA G410":4},site_type:"Mini-Pit site (On-road)",latitude:-26.15,longitude:29.45,province:"Mpumalanga",fleets:[{no:740,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:742,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:757,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:759,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x4"}]},
+            {location:"Foskor",region:"Eastern Limb",mmu_count:3,fleet_numbers:[708,710,773],tank_sizes:{"18t":3},mmu_types:{"Vertex A":3},drive_configs:{"6x6":3},makes:{"SCANIA G410":3},site_type:"Mine Base site (On-Pit)",latitude:-24.0,longitude:31.0,province:"Limpopo",fleets:[{no:708,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:710,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:773,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Grootegeluk",region:"Western Limb",mmu_count:5,fleet_numbers:[706,724,785,789,935],tank_sizes:{"18t":4,"28t":1},mmu_types:{"Vertex A":5},drive_configs:{"6x6":4,"8x6":1},makes:{"SCANIA G410":5},site_type:"Mine Base site (On-Pit)",latitude:-23.68,longitude:27.54,province:"Limpopo",fleets:[{no:706,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:724,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:785,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:789,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:935,size:"28t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"}]},
+            {location:"Karowe",region:"Africa Botswana",mmu_count:2,fleet_numbers:[714,764],tank_sizes:{"10t":1,"15t":1},mmu_types:{"Emulgex A":1,"Vertex A":1},drive_configs:{"6x6":1,"8x4":1},makes:{"SCANIA G410":1,"SCANIA G380":1},site_type:"Mine Base site (On-Pit)",latitude:-21.32,longitude:25.47,province:"Botswana",fleets:[{no:714,size:"10t",type:"Emulgex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:764,size:"15t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"8x4"}]},
+            {location:"Kudumane",region:"Northern Cape",mmu_count:6,fleet_numbers:[707,749,763,797,798,799],tank_sizes:{"18t":5,"10t":1},mmu_types:{"Vertex A":6},drive_configs:{"6x6":6},makes:{"SCANIA G410":5,"SCANIA G380":1},site_type:"Mine Base site (On-Pit)",latitude:-27.2,longitude:23.45,province:"Northern Cape",fleets:[{no:707,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:749,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:763,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:797,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:798,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:799,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Leeuwpan",region:"Mpumalanga",mmu_count:4,fleet_numbers:[704,726,782,786],tank_sizes:{"18t":4},mmu_types:{"Vertex A":4},drive_configs:{"6x6":4},makes:{"SCANIA G410":3,"SCANIA G380":1},site_type:"Mine Base site (On-Pit)",latitude:-26.2,longitude:29.0,province:"Mpumalanga",fleets:[{no:704,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:726,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:782,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:786,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Lesotho",region:"Africa Lesotho",mmu_count:4,fleet_numbers:[731,752,765,796],tank_sizes:{"10t":4},mmu_types:{"Emulgex A":2,"Vertex A":2},drive_configs:{"6x6":3,"6x4":1},makes:{"SCANIA G410":3,"SCANIA G380":1},site_type:"Mine Base site (On-Pit)",latitude:-29.31,longitude:28.48,province:"Lesotho",fleets:[{no:731,size:"10t",type:"Emulgex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:752,size:"10t",type:"Emulgex A",make:"SCANIA",model:"G410",drive:"6x4"},{no:765,size:"10t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:796,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Makhado",region:"Mpumalanga",mmu_count:1,fleet_numbers:[725],tank_sizes:{"18t":1},mmu_types:{"Vertex A":1},drive_configs:{"6x6":1},makes:{"SCANIA G410":1},site_type:"Mini-Pit site (On-road)",latitude:-23.05,longitude:29.91,province:"Limpopo",fleets:[{no:725,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Mini Pits",region:"Mpumalanga",mmu_count:12,fleet_numbers:[730,735,760,917,918,919,927,928,929,930,931,932],tank_sizes:{"15t":12},mmu_types:{"Vertex A":12},drive_configs:{"8x6":11,"8x4":1},makes:{"SCANIA G410":12},site_type:"Mini-Pit site (On-road)",latitude:-26.0,longitude:29.2,province:"Mpumalanga",fleets:[{no:730,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:735,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:760,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x4"},{no:917,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:918,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:919,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:927,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:928,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:929,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:930,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:931,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:932,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"}]},
+            {location:"Mokala",region:"Northern Cape",mmu_count:2,fleet_numbers:[790,791],tank_sizes:{"18t":2},mmu_types:{"Vertex A":2},drive_configs:{"6x6":2},makes:{"SCANIA G410":2},site_type:"Mine Base site (On-Pit)",latitude:-29.17,longitude:24.27,province:"Northern Cape",fleets:[{no:790,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:791,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Rossing",region:"Africa Namibia",mmu_count:3,fleet_numbers:[738,739,768],tank_sizes:{"18t":2,"15t":1},mmu_types:{"Vertex A":3},drive_configs:{"6x6":3},makes:{"SCANIA G410":2,"SCANIA G380":1},site_type:"Mini-Pit site (On-road)",latitude:-22.48,longitude:15.05,province:"Namibia",fleets:[{no:738,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:739,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:768,size:"15t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"}]},
+            {location:"Rustenburg OC",region:"Western Limb",mmu_count:4,fleet_numbers:[923,924,925,926],tank_sizes:{"15t":4},mmu_types:{"Vertex A":4},drive_configs:{"8x6":4},makes:{"SCANIA G410":4},site_type:"Mini-Pit site (On-road)",latitude:-25.67,longitude:27.24,province:"North West",fleets:[{no:923,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:924,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:925,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:926,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"}]},
+            {location:"Sedibeng",region:"Northern Cape",mmu_count:2,fleet_numbers:[713,718],tank_sizes:{"18t":1,"23t":1},mmu_types:{"Vertex A":2},drive_configs:{"6x6":2},makes:{"SCANIA G410":2},site_type:"Mine Base site (On-Pit)",latitude:-27.4,longitude:23.0,province:"Northern Cape",fleets:[{no:713,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:718,size:"23t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Tharisa",region:"Western Limb",mmu_count:7,fleet_numbers:[751,753,755,762,774,775,784],tank_sizes:{"10t":4,"18t":3},mmu_types:{"Vertex A":7},drive_configs:{"6x6":7},makes:{"SCANIA G410":5,"SCANIA G380":2},site_type:"Mine Base site (On-Pit)",latitude:-25.65,longitude:27.5,province:"North West",fleets:[{no:751,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:753,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:755,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:762,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:774,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:775,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:784,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"UMK",region:"Northern Cape",mmu_count:5,fleet_numbers:[720,776,777,779,793],tank_sizes:{"18t":5},mmu_types:{"Vertex A":5},drive_configs:{"6x6":5},makes:{"SCANIA G380":3,"SCANIA G410":2},site_type:"Mine Base site (On-Pit)",latitude:-27.05,longitude:22.85,province:"Northern Cape",fleets:[{no:720,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:776,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:777,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:779,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:793,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Weilaagte",region:"Mpumalanga",mmu_count:9,fleet_numbers:[705,709,721,732,736,750,761,794,921],tank_sizes:{"18t":6,"15t":2,"10t":1},mmu_types:{"Vertex A":9},drive_configs:{"6x6":7,"8x6":2},makes:{"SCANIA G410":9},site_type:"Mini-Pit site (On-road)",latitude:-26.1,longitude:29.35,province:"Mpumalanga",fleets:[{no:705,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:709,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:721,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:732,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:736,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:750,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:761,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:794,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:921,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"}]},
+            {location:"Wildfontein",region:"Mpumalanga",mmu_count:9,fleet_numbers:[734,754,912,914,915,916,920,922,933],tank_sizes:{"18t":4,"15t":4,"10t":1},mmu_types:{"Vertex A":9},drive_configs:{"6x6":5,"8x6":4},makes:{"SCANIA G410":9},site_type:"Mini-Pit site (On-road)",latitude:-26.3,longitude:29.55,province:"Mpumalanga",fleets:[{no:734,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:754,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:912,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:914,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:915,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:916,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:920,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:922,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:933,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"}]},
+            {location:"Witbank",region:"Parked",mmu_count:9,fleet_numbers:[719,723,729,745,747,767,780,781,934],tank_sizes:{"18t":2,"10t":4,"15t":2,"28t":1},mmu_types:{"Vertex A":6,"Expanfo":2,"Emulgex A":1},drive_configs:{"6x6":4,"8x6":1,"4x4":2,"6x4":1},makes:{"SCANIA G410":3,"SCANIA G380":3,"MAN LE 18.220":2},site_type:"Inactive",latitude:-25.87,longitude:29.23,province:"Mpumalanga",fleets:[{no:719,size:"10t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:723,size:"15t",type:"Expanfo",make:"SCANIA",model:"-",drive:"6x4"},{no:729,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:745,size:"10t",type:"Emulgex A",make:"MAN",model:"LE 18.220",drive:"4x4"},{no:747,size:"10t",type:"Vertex A",make:"MAN",model:"LE 18.220",drive:"4x4"},{no:767,size:"15t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:780,size:"18t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:781,size:"10t",type:"Expanfo",make:"SCANIA",model:"G380",drive:"6x6"},{no:934,size:"28t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"}]},
+            {location:"Witbank",region:"Rebuild",mmu_count:6,fleet_numbers:[766,769,770,771,772,778],tank_sizes:{"15t":5,"18t":1},mmu_types:{"Vertex A":6},drive_configs:{"8x6":3,"6x6":3},makes:{"SCANIA G410":3,"SCANIA G380":3},site_type:"Inactive",latitude:-25.92,longitude:29.28,province:"Mpumalanga",fleets:[{no:766,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:769,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:770,size:"15t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:771,size:"15t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"8x6"},{no:772,size:"15t",type:"Vertex A",make:"SCANIA",model:"G380",drive:"6x6"},{no:778,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]},
+            {location:"Zambia",region:"Africa Zambia",mmu_count:7,fleet_numbers:[701,703,711,712,715,746,911],tank_sizes:{"18t":5,"10t":2},mmu_types:{"Vertex A":5,"Emulgex A":2},drive_configs:{"6x6":6,"4x4":1},makes:{"SCANIA G410":6,"MAN LE 18.220":1},site_type:"Mini-Pit site (On-road)",latitude:-12.82,longitude:28.27,province:"Zambia",fleets:[{no:701,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:703,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:711,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:712,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:715,size:"10t",type:"Emulgex A",make:"SCANIA",model:"G410",drive:"6x6"},{no:746,size:"10t",type:"Emulgex A",make:"MAN",model:"LE 18.220",drive:"4x4"},{no:911,size:"18t",type:"Vertex A",make:"SCANIA",model:"G410",drive:"6x6"}]}
+        ],
+        summary: {total_mmus:120,total_locations:23,total_regions:11,active_mmus:105,inactive_mmus:15,parked_mmus:9,rebuild_mmus:6,on_pit:46,on_road:59}
+    };
+
+    // ==================== SITE CONTACTS ====================
+    const siteContacts = {
+        "Belfast":       {admin:"Evans Mkhatshwa / Simphiwe Batyi",siteManager:"Gerhard Venter",businessManager:"Bryton Rasebeshela",maintPlanner:"Jan Pienaar"},
+        "Carolina":      {admin:"Londeka Nkosi",siteManager:"Sarah Leshabane",businessManager:"Lebo Nkoana",maintPlanner:"Jan Pienaar"},
+        "Weilaagte":     {admin:"Noni Cisibe",siteManager:"Tshepiso Makawu",businessManager:"Bryton Rasebeshela",maintPlanner:"Jan Pienaar"},
+        "Wildfontein":   {admin:"Funiwe Mokoena",siteManager:"Sarah Leshabane",businessManager:"Lebo Nkoana",maintPlanner:"Jan Pienaar"},
+        "Dorstfontein":  {admin:"Welicia Schroender",siteManager:"Sarah Leshabane",businessManager:"Lebo Nkoana",maintPlanner:"Jan Pienaar"},
+        "Mini Pits":     {admin:"Galaletsang Chawane",siteManager:"Steward Digashu",businessManager:"Lebo Nkoana",maintPlanner:"Jan Pienaar"},
+        "UMK":           {admin:"Zanele Louw",siteManager:"Thami Motaung",businessManager:"Benny Bhila",maintPlanner:"Beneshia Christie"},
+        "Grootegeluk":   {admin:"Carina Geyer",siteManager:"Onalerona Senna",businessManager:"Bryton Rasebeshela",maintPlanner:"Jan Pienaar"},
+        "Mokala":        {admin:"Zanele Louw",siteManager:"Thami Motaung",businessManager:"Benny Bhila",maintPlanner:"Jan Pienaar"},
+        "Kudumane":      {admin:"Puseletso Tongwane",siteManager:"Samukele Mkhize",businessManager:"Benny Bhila",maintPlanner:"Beneshia Christie"},
+        "Sedibeng":      {admin:"Ilze Strohmenger",siteManager:"Eugene Strochmenger",businessManager:"Godfrey Mmope",maintPlanner:"Beneshia Christie"},
+        "Leeuwpan":      {admin:"Nontokozo Langa",siteManager:"Tshepiso Makawu",businessManager:"Bryton Rasebeshela",maintPlanner:"Jan Pienaar"},
+        "Foskor":        {admin:"Nomthandazo Matlala",siteManager:"Marcus Madiba",businessManager:"Vusi Mathebula",maintPlanner:"Jan Pienaar"},
+        "Tharisa":       {admin:"Palesa Meyers / Charmain Kola",siteManager:"Thuto Mahlelebe",businessManager:"Francois Viljoen",maintPlanner:"Jan Pienaar"},
+        "Rustenburg OC": {admin:"Sacky Moshashane / Bridget Matlou",siteManager:"Thuso Madingoane",businessManager:"Seja Tepanyekga",maintPlanner:"Jan Pienaar"},
+        "Lesotho":       {admin:"Lebona Matete / Kolo Kolo",siteManager:"Kolo Kolo",businessManager:"Ronald Joseph",maintPlanner:"Beneshia Christie"},
+        "Brauteseth":    {admin:"Alpheus Sibiya",siteManager:"Ndivhuwo Makuya",businessManager:"Lebo Nkoana",maintPlanner:"Jan Pienaar"},
+        "Zambia":        {admin:"-",siteManager:"Collins Chipasha Kazimoto",businessManager:"Cleophas Mugova",maintPlanner:"Beneshia Christie"},
+        "Karowe":        {admin:"Thato Mongatane",siteManager:"Laone Motshwarapitse",businessManager:"Ronald Joseph",maintPlanner:"Beneshia Christie"},
+        "Rossing":       {admin:"-",siteManager:"-",businessManager:"Cleophas Mugova",maintPlanner:"Beneshia Christie"},
+        "Makhado":       {admin:"-",siteManager:"-",businessManager:"Lebo Nkoana",maintPlanner:"Jan Pienaar"}
+    };
+
+    // ==================== BUSINESS MANAGERS ====================
+    const businessManagers = [
+        {id:"all",name:"All Sites",title:"Complete Fleet Overview",sites:[],color:"#c41e3a"},
+        {id:"lebo",name:"Lebo Nkoana",title:"Mpumalanga Operations",sites:["Carolina","Wildfontein","Dorstfontein","Mini Pits","Brauteseth","Makhado"],color:"#3b82f6"},
+        {id:"bryton",name:"Bryton Rasebeshela",title:"Mpumalanga & Limpopo",sites:["Belfast","Weilaagte","Grootegeluk","Leeuwpan"],color:"#22c55e"},
+        {id:"benny",name:"Benny Bhila",title:"Northern Cape",sites:["UMK","Mokala","Kudumane"],color:"#f59e0b"},
+        {id:"godfrey",name:"Godfrey Mmope",title:"Northern Cape - Postmasburg",sites:["Sedibeng"],color:"#ec4899"},
+        {id:"francois",name:"Francois Viljoen",title:"Western Limb - Tharisa",sites:["Tharisa"],color:"#8b5cf6"},
+        {id:"seja",name:"Seja Tepanyekga",title:"Western Limb - Rustenburg",sites:["Rustenburg OC"],color:"#06b6d4"},
+        {id:"vusi",name:"Vusi Mathebula",title:"Eastern Limb - Foskor",sites:["Foskor"],color:"#14b8a6"},
+        {id:"ronald",name:"Ronald Joseph",title:"Africa - Lesotho & Botswana",sites:["Lesotho","Karowe"],color:"#f97316"},
+        {id:"cleophas",name:"Cleophas Mugova",title:"Africa - Namibia & Zambia",sites:["Zambia","Rossing"],color:"#6366f1"}
+    ];
+
+    // ==================== CONSTANTS ====================
+    const siteTypeColors = {'Mine Base site (On-Pit)':'#22c55e','Mini-Pit site (On-road)':'#3b82f6','Inactive':'#6b7280'};
+    const siteTypeLabels = {'Mine Base site (On-Pit)':'On-Pit','Mini-Pit site (On-road)':'On-Road','Inactive':'Inactive'};
+    const regionColors = {'Mpumalanga':'#c41e3a','Northern Cape':'#f59e0b','Western Limb':'#8b5cf6','Eastern Limb':'#22c55e','Kwa Zulu Natal':'#3b82f6','Africa Botswana':'#ec4899','Africa Lesotho':'#14b8a6','Africa Namibia':'#f97316','Africa Zambia':'#6366f1','Parked':'#6b7280','Rebuild':'#4b5563'};
+
+    let map, markers = [], activeTab = 'all';
+
+    // ==================== TRUCK SVG HELPERS ====================
+    function truckSvgMap(count, siteType) {
+        const tankColor = siteType === 'Mine Base site (On-Pit)' ? '#e8b930' : siteType === 'Mini-Pit site (On-road)' ? '#e8b930' : '#888';
+        const sc = Math.max(0.8, Math.min(1.4, 0.75 + count * 0.055));
+        const w = Math.round(52 * sc), h = Math.round(30 * sc);
+        return {w, h, html: `<svg width="${w}" height="${h}" viewBox="0 0 52 30" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="7" width="14" height="16" rx="2" fill="#c41e3a"/>
+            <rect x="2" y="9" width="10" height="7" rx="1" fill="rgba(0,0,0,.15)"/>
+            <rect x="14" y="2" width="37" height="21" rx="4" fill="${tankColor}"/>
+            <text x="32" y="16" text-anchor="middle" fill="#333" font-weight="800" font-size="11" font-family="Roboto Mono,monospace">${count}</text>
+            <circle cx="7" cy="26" r="3.5" fill="#1a1a1a" stroke="#444" stroke-width=".5"/>
+            <circle cx="22" cy="26" r="3.5" fill="#1a1a1a" stroke="#444" stroke-width=".5"/>
+            <circle cx="44" cy="26" r="3.5" fill="#1a1a1a" stroke="#444" stroke-width=".5"/>
+        </svg>`};
+    }
+
+    function truckSvgDetail(fleet) {
+        const tankColor = fleet.type === 'Emulgex A' ? '#e07a5f' : fleet.type === 'Expanfo' ? '#888' : '#e8b930';
+        return `<svg viewBox="0 0 80 42" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="9" width="20" height="22" rx="3" fill="#c41e3a"/>
+            <rect x="3" y="12" width="14" height="9" rx="2" fill="rgba(0,0,0,.12)"/>
+            <rect x="20" y="2" width="58" height="29" rx="5" fill="${tankColor}"/>
+            <text x="49" y="19" text-anchor="middle" fill="#333" font-weight="800" font-size="13" font-family="Roboto Mono,monospace">${fleet.no}</text>
+            <text x="49" y="28" text-anchor="middle" fill="#555" font-size="7" font-family="Inter,sans-serif">${fleet.size}</text>
+            <circle cx="10" cy="35" r="4.5" fill="#1a1a1a" stroke="#555" stroke-width=".5"/>
+            <circle cx="30" cy="35" r="4.5" fill="#1a1a1a" stroke="#555" stroke-width=".5"/>
+            <circle cx="68" cy="35" r="4.5" fill="#1a1a1a" stroke="#555" stroke-width=".5"/>
+        </svg>`;
+    }
+
+    // ==================== INIT ====================
+    document.addEventListener('DOMContentLoaded', function() {
+        initTabs();
+        initMap();
+        animateStats(fleetData.summary);
+        populateFilters();
+        populateRegionDistribution();
+        renderLocationList();
+        initSearch();
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-ZA',{year:'numeric',month:'short',day:'numeric'});
+    });
+
+    // ==================== TABS ====================
+    function initTabs() {
+        const bar = document.getElementById('tabBar');
+        businessManagers.forEach(bm => {
+            const btn = document.createElement('button');
+            btn.className = 'tab-btn' + (bm.id === 'all' ? ' active' : '');
+            btn.dataset.tab = bm.id;
+            const count = bm.id === 'all' ? fleetData.summary.total_mmus : getLocationsForBM(bm).reduce((s,l) => s+l.mmu_count, 0);
+            btn.innerHTML = `${bm.id === 'all' ? 'All Sites' : bm.name.split(' ')[0] + ' ' + bm.name.split(' ').slice(1).map(w=>w[0]+'.').join('')}<span class="tab-count">${count}</span>`;
+            btn.title = bm.name + ' - ' + bm.title;
+            btn.addEventListener('click', () => switchTab(bm.id));
+            bar.appendChild(btn);
+        });
+    }
+
+    function getLocationsForBM(bm) {
+        if (bm.id === 'all') return fleetData.locations;
+        return fleetData.locations.filter(loc => bm.sites.includes(loc.location));
+    }
+
+    function switchTab(tabId) {
+        activeTab = tabId;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+        const bm = businessManagers.find(b => b.id === tabId);
+        const banner = document.getElementById('bmBanner');
+        if (tabId === 'all') {
+            banner.classList.remove('active');
+            const locs = getFilteredLocations();
+            addMarkers(locs);
+            renderLocationList(locs);
+            animateStats(fleetData.summary);
+            if (locs.length > 0) map.fitBounds(L.latLngBounds(locs.map(l=>[l.latitude,l.longitude])),{padding:[40,40]});
+        } else {
+            const locs = getLocationsForBM(bm);
+            banner.classList.add('active');
+            document.getElementById('bmName').textContent = bm.name;
+            document.getElementById('bmTitle').textContent = bm.title;
+            const totalMMU = locs.reduce((s,l)=>s+l.mmu_count,0);
+            document.getElementById('bmStats').innerHTML = `
+                <div class="bm-banner-stat"><div class="bm-banner-stat-value">${locs.length}</div><div class="bm-banner-stat-label">Sites</div></div>
+                <div class="bm-banner-stat"><div class="bm-banner-stat-value">${totalMMU}</div><div class="bm-banner-stat-label">MMUs</div></div>`;
+            addMarkers(locs);
+            renderLocationList(locs);
+            animateStats({total_mmus:totalMMU,active_mmus:totalMMU,total_locations:locs.length,total_regions:[...new Set(locs.map(l=>l.region))].length,on_pit:locs.filter(l=>l.site_type==='Mine Base site (On-Pit)').reduce((s,l)=>s+l.mmu_count,0),on_road:locs.filter(l=>l.site_type==='Mini-Pit site (On-road)').reduce((s,l)=>s+l.mmu_count,0),parked_mmus:0,rebuild_mmus:0});
+            if (locs.length > 0) map.fitBounds(L.latLngBounds(locs.map(l=>[l.latitude,l.longitude])),{padding:[50,50],maxZoom:8});
+        }
+        closeMmuDetail();
+    }
+
+    // ==================== MAP ====================
+    function initMap() {
+        map = L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([-25.5,26.5],5);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+            attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19
+        }).addTo(map);
+        addMarkers(fleetData.locations);
+    }
+
+    function createTruckIcon(loc) {
+        const {w,h,html} = truckSvgMap(loc.mmu_count, loc.site_type);
+        return L.divIcon({className:'truck-marker',html:html,iconSize:[w,h],iconAnchor:[w/2,h],popupAnchor:[0,-h]});
+    }
+
+    function addMarkers(locations) {
+        markers.forEach(m=>map.removeLayer(m));
+        markers = [];
+        locations.forEach(loc => {
+            const marker = L.marker([loc.latitude,loc.longitude],{icon:createTruckIcon(loc)});
+            const tankStr = Object.entries(loc.tank_sizes).sort((a,b)=>parseInt(b[0])-parseInt(a[0])).map(([s,c])=>`${s}: ${c}`).join(', ');
+            const driveStr = loc.drive_configs ? Object.entries(loc.drive_configs).map(([d,c])=>`${d}: ${c}`).join(', ') : '-';
+            const siteLabel = siteTypeLabels[loc.site_type]||loc.site_type;
+            const contact = siteContacts[loc.location];
+            const contactHtml = contact ? `<div class="popup-detail-row"><span class="popup-detail-label">Business Mgr</span><span class="popup-detail-value">${contact.businessManager}</span></div><div class="popup-detail-row"><span class="popup-detail-label">Site Manager</span><span class="popup-detail-value">${contact.siteManager}</span></div>` : '';
+            marker.bindPopup(`<div class="custom-popup"><h3>${loc.location}</h3><div class="popup-region">${loc.region} &middot; ${loc.province}</div>
+                <div class="popup-stats"><div class="popup-stat"><div class="popup-stat-value">${loc.mmu_count}</div><div class="popup-stat-label">MMUs</div></div><div class="popup-stat"><div class="popup-stat-value">${siteLabel}</div><div class="popup-stat-label">Type</div></div><div class="popup-stat"><div class="popup-stat-value">${Object.keys(loc.tank_sizes).length}</div><div class="popup-stat-label">Sizes</div></div></div>
+                <div class="popup-detail-row"><span class="popup-detail-label">Tanks</span><span class="popup-detail-value">${tankStr}</span></div>
+                <div class="popup-detail-row"><span class="popup-detail-label">Drivetrain</span><span class="popup-detail-value">${driveStr}</span></div>
+                ${contactHtml}</div>`,{maxWidth:280});
+            marker.on('click',()=>{showLocationDetail(loc);highlightLocationInList(loc.location+'-'+loc.region);});
+            marker.addTo(map);
+            markers.push(marker);
+        });
+    }
+
+    // ==================== STATS ====================
+    function animateStats(data) {
+        animateValue('totalMMUs',data.total_mmus);
+        animateValue('activeMMUs',data.active_mmus);
+        animateValue('totalSites',data.total_locations);
+        animateValue('totalRegions',data.total_regions);
+        animateValue('onPitCount',data.on_pit);
+        animateValue('onRoadCount',data.on_road);
+        animateValue('parkedCount',data.parked_mmus);
+        animateValue('rebuildCount',data.rebuild_mmus);
+    }
+    function animateValue(id,target) {
+        const el=document.getElementById(id); if(!el)return;
+        const start=performance.now(),dur=600;
+        requestAnimationFrame(function step(ts){const p=Math.min((ts-start)/dur,1);el.textContent=Math.round((1-Math.pow(1-p,3))*target);if(p<1)requestAnimationFrame(step);});
+    }
+
+    // ==================== FILTERS ====================
+    function populateFilters() {
+        const rf=document.getElementById('regionFilter');
+        [...new Set(fleetData.locations.map(l=>l.region))].sort().forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;rf.appendChild(o);});
+        const tsf=document.getElementById('tankSizeFilters'),sizes=new Set();
+        fleetData.locations.forEach(l=>Object.keys(l.tank_sizes).forEach(s=>sizes.add(s)));
+        [...sizes].sort((a,b)=>parseInt(a)-parseInt(b)).forEach(s=>{const l=document.createElement('label');l.className='checkbox-item';l.innerHTML=`<input type="checkbox" value="${s}" checked onchange="applyFilters()"> ${s}`;tsf.appendChild(l);});
+        rf.addEventListener('change',applyFilters);
+        document.getElementById('siteTypeFilter').addEventListener('change',applyFilters);
+    }
+    function populateRegionDistribution() {
+        const c=document.getElementById('regionDistribution'),rc={};
+        fleetData.locations.forEach(l=>{rc[l.region]=(rc[l.region]||0)+l.mmu_count;});
+        const mx=Math.max(...Object.values(rc)),sr=Object.entries(rc).sort((a,b)=>b[1]-a[1]);
+        c.innerHTML=sr.map(([r,n])=>`<div class="region-bar"><div class="region-bar-header"><span class="region-bar-name">${r}</span><span class="region-bar-count">${n}</span></div><div class="region-bar-track"><div class="region-bar-fill" style="width:0%;background:${regionColors[r]||'#c41e3a'};"></div></div></div>`).join('');
+        requestAnimationFrame(()=>setTimeout(()=>c.querySelectorAll('.region-bar-fill').forEach((b,i)=>{b.style.width=(sr[i][1]/mx)*100+'%';}),100));
+    }
+
+    function getFilteredLocations() {
+        const rf=document.getElementById('regionFilter').value;
+        const stf=document.getElementById('siteTypeFilter').value;
+        const cbs=[...document.querySelectorAll('#tankSizeFilters input:checked')].map(c=>c.value);
+        const q=document.getElementById('fleetSearch').value.trim();
+        let base = activeTab === 'all' ? fleetData.locations : getLocationsForBM(businessManagers.find(b=>b.id===activeTab));
+        return base.filter(loc => {
+            if(rf!=='all'&&loc.region!==rf) return false;
+            if(stf!=='all'&&loc.site_type!==stf) return false;
+            if(cbs.length>0&&!Object.keys(loc.tank_sizes).some(s=>cbs.includes(s))) return false;
+            if(q){const mf=loc.fleet_numbers.some(fn=>String(fn).includes(q));const ml=loc.location.toLowerCase().includes(q.toLowerCase());if(!mf&&!ml)return false;}
+            return true;
+        });
+    }
+
+    function applyFilters() {
+        const filtered = getFilteredLocations();
+        addMarkers(filtered);
+        renderLocationList(filtered);
+        if(filtered.length>0) map.fitBounds(L.latLngBounds(filtered.map(l=>[l.latitude,l.longitude])),{padding:[40,40]});
+    }
+
+    function initSearch() {
+        let t;document.getElementById('fleetSearch').addEventListener('input',()=>{clearTimeout(t);t=setTimeout(applyFilters,250);});
+    }
+
+    // ==================== LOCATION LIST ====================
+    function renderLocationList(locations=fleetData.locations) {
+        const c=document.getElementById('locationList');
+        document.getElementById('locationCount').textContent=locations.length;
+        c.innerHTML=locations.map(loc=>{
+            const sl=siteTypeLabels[loc.site_type]||loc.site_type;
+            const tc=loc.site_type==='Inactive'?'inactive':'site-type';
+            const contact=siteContacts[loc.location];
+            const bmTag=contact?`<span class="location-tag bm">${contact.businessManager}</span>`:'';
+            return `<div class="location-item" data-id="${loc.location}-${loc.region}" onclick="focusLocation('${loc.location.replace(/'/g,"\\'")}','${loc.region.replace(/'/g,"\\'")}')">
+                <div class="location-item-header"><span class="location-name">${loc.location}</span><span class="location-count">${loc.mmu_count}</span></div>
+                <div class="location-meta"><span class="location-tag region">${loc.region}</span><span class="location-tag ${tc}">${sl}</span>${bmTag}</div></div>`;
+        }).join('');
+    }
+
+    // ==================== LOCATION DETAIL ====================
+    function focusLocation(name,region) {
+        const loc=fleetData.locations.find(l=>l.location===name&&l.region===region);
+        if(loc){map.setView([loc.latitude,loc.longitude],10,{animate:true,duration:.5});showLocationDetail(loc);highlightLocationInList(name+'-'+region);}
+    }
+    function highlightLocationInList(id) {
+        document.querySelectorAll('.location-item').forEach(i=>{i.classList.remove('active');if(i.dataset.id===id){i.classList.add('active');i.scrollIntoView({behavior:'smooth',block:'nearest'});}});
+    }
+
+    function showLocationDetail(loc) {
+        const panel=document.getElementById('mmuDetailPanel'),title=document.getElementById('detailTitle'),content=document.getElementById('mmuDetailContent');
+        title.textContent=loc.location;
+        const sl=siteTypeLabels[loc.site_type]||loc.site_type;
+        const sc=siteTypeColors[loc.site_type]||'#6b7280';
+        const tankStr=Object.entries(loc.tank_sizes).sort((a,b)=>parseInt(b[0])-parseInt(a[0])).map(([s,c])=>`${s}: ${c}`).join(' | ');
+        const typeStr=Object.entries(loc.mmu_types).map(([t,c])=>`${t}: ${c}`).join(' | ');
+        const contact=siteContacts[loc.location];
+        const contactHtml=contact?`<div class="contact-card">
+            <div class="contact-row"><span class="contact-label">Business Manager</span><span class="contact-value">${contact.businessManager}</span></div>
+            <div class="contact-row"><span class="contact-label">Site Manager</span><span class="contact-value">${contact.siteManager}</span></div>
+            <div class="contact-row"><span class="contact-label">Admin / Supervisor</span><span class="contact-value">${contact.admin}</span></div>
+            <div class="contact-row"><span class="contact-label">Maintenance Planner</span><span class="contact-value">${contact.maintPlanner}</span></div>
+        </div>`:'';
+
+        content.innerHTML = `
+            <div class="detail-info-grid">
+                <div class="detail-info-item"><div class="detail-info-label">Region</div><div class="detail-info-value">${loc.region}</div></div>
+                <div class="detail-info-item"><div class="detail-info-label">Site Type</div><div class="detail-info-value" style="color:${sc};">${sl}</div></div>
+                <div class="detail-info-item"><div class="detail-info-label">Tank Sizes</div><div class="detail-info-value" style="font-size:.65rem;">${tankStr}</div></div>
+                <div class="detail-info-item"><div class="detail-info-label">MMU Types</div><div class="detail-info-value" style="font-size:.65rem;">${typeStr}</div></div>
+            </div>
+            ${contactHtml}
+            <div style="font-size:.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.35rem;font-weight:500;">Fleet Units (${loc.mmu_count})</div>
+            <div class="truck-grid">
+                ${(loc.fleets||[]).map(f=>`<div class="truck-card">${truckSvgDetail(f)}<div class="truck-card-info">${f.drive} &middot; ${f.make} ${f.model||''}</div></div>`).join('')}
+            </div>`;
+        panel.classList.add('active');
+    }
+
+    function closeMmuDetail() {
+        document.getElementById('mmuDetailPanel').classList.remove('active');
+        document.querySelectorAll('.location-item').forEach(i=>i.classList.remove('active'));
+    }
+    </script>
+</body>
+</html>
